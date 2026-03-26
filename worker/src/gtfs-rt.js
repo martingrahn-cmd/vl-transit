@@ -1,166 +1,238 @@
 /**
- * Lightweight GTFS-RT protobuf decoder for Cloudflare Workers
- * Uses the 'pbf' library (~3KB) instead of heavy protobufjs
+ * Self-contained GTFS-RT protobuf decoder
+ * No external dependencies — works in Cloudflare Workers
  */
-import Pbf from 'pbf';
 
-// ─── StopTimeEvent ──────────────────────────────────────
-function readStopTimeEvent(pbf, end) {
+class PbfReader {
+  constructor(buf) {
+    this.buf = new Uint8Array(buf);
+    this.pos = 0;
+    this.length = this.buf.length;
+  }
+
+  readVarint() {
+    let val = 0, shift = 0;
+    while (this.pos < this.length) {
+      const b = this.buf[this.pos++];
+      val |= (b & 0x7F) << shift;
+      if (b < 0x80) return val >>> 0;
+      shift += 7;
+    }
+    return val >>> 0;
+  }
+
+  readSVarint() {
+    const val = this.readVarint();
+    return (val >>> 1) ^ -(val & 1);
+  }
+
+  readFloat() {
+    const view = new DataView(this.buf.buffer, this.buf.byteOffset + this.pos, 4);
+    this.pos += 4;
+    return view.getFloat32(0, true);
+  }
+
+  readBoolean() {
+    return this.readVarint() !== 0;
+  }
+
+  readString() {
+    const len = this.readVarint();
+    const str = new TextDecoder().decode(this.buf.subarray(this.pos, this.pos + len));
+    this.pos += len;
+    return str;
+  }
+
+  readBytes() {
+    const len = this.readVarint();
+    const bytes = this.buf.subarray(this.pos, this.pos + len);
+    this.pos += len;
+    return bytes;
+  }
+
+  readTag() {
+    if (this.pos >= this.length) return 0;
+    return this.readVarint();
+  }
+
+  skip(wireType) {
+    switch (wireType) {
+      case 0: this.readVarint(); break;
+      case 1: this.pos += 8; break;
+      case 2: { const len = this.readVarint(); this.pos += len; break; }
+      case 5: this.pos += 4; break;
+      default: throw new Error(`Unknown wire type: ${wireType}`);
+    }
+  }
+}
+
+function readStopTimeEvent(reader, end) {
   const obj = { delay: 0, time: 0, uncertainty: 0 };
-  while (pbf.pos < end) {
-    const tag = pbf.readTag();
-    switch (tag >> 3) {
-      case 1: obj.delay = pbf.readSVarint(); break;
-      case 2: obj.time = pbf.readVarint(); break;
-      case 3: obj.uncertainty = pbf.readVarint(); break;
-      default: pbf.skip(tag & 7);
+  while (reader.pos < end) {
+    const tag = reader.readTag();
+    const field = tag >> 3;
+    const wire = tag & 7;
+    switch (field) {
+      case 1: obj.delay = reader.readSVarint(); break;
+      case 2: obj.time = reader.readVarint(); break;
+      case 3: obj.uncertainty = reader.readVarint(); break;
+      default: reader.skip(wire);
     }
   }
   return obj;
 }
 
-// ─── StopTimeUpdate ─────────────────────────────────────
-function readStopTimeUpdate(pbf, end) {
+function readStopTimeUpdate(reader, end) {
   const obj = { stopSequence: 0, stopId: '', arrival: null, departure: null };
-  while (pbf.pos < end) {
-    const tag = pbf.readTag();
-    switch (tag >> 3) {
-      case 1: obj.stopSequence = pbf.readVarint(); break;
-      case 2: { const e = pbf.readVarint() + pbf.pos; obj.arrival = readStopTimeEvent(pbf, e); break; }
-      case 3: { const e = pbf.readVarint() + pbf.pos; obj.departure = readStopTimeEvent(pbf, e); break; }
-      case 4: obj.stopId = pbf.readString(); break;
-      default: pbf.skip(tag & 7);
+  while (reader.pos < end) {
+    const tag = reader.readTag();
+    const field = tag >> 3;
+    const wire = tag & 7;
+    switch (field) {
+      case 1: obj.stopSequence = reader.readVarint(); break;
+      case 2: { const e = reader.readVarint() + reader.pos; obj.arrival = readStopTimeEvent(reader, e); break; }
+      case 3: { const e = reader.readVarint() + reader.pos; obj.departure = readStopTimeEvent(reader, e); break; }
+      case 4: obj.stopId = reader.readString(); break;
+      default: reader.skip(wire);
     }
   }
   return obj;
 }
 
-// ─── TripDescriptor ─────────────────────────────────────
-function readTrip(pbf, end) {
+function readTrip(reader, end) {
   const obj = { tripId: '', startTime: '', startDate: '', routeId: '', directionId: 0 };
-  while (pbf.pos < end) {
-    const tag = pbf.readTag();
-    switch (tag >> 3) {
-      case 1: obj.tripId = pbf.readString(); break;
-      case 2: obj.startTime = pbf.readString(); break;
-      case 3: obj.startDate = pbf.readString(); break;
-      case 5: obj.routeId = pbf.readString(); break;
-      case 6: obj.directionId = pbf.readVarint(); break;
-      default: pbf.skip(tag & 7);
+  while (reader.pos < end) {
+    const tag = reader.readTag();
+    const field = tag >> 3;
+    const wire = tag & 7;
+    switch (field) {
+      case 1: obj.tripId = reader.readString(); break;
+      case 2: obj.startTime = reader.readString(); break;
+      case 3: obj.startDate = reader.readString(); break;
+      case 5: obj.routeId = reader.readString(); break;
+      case 6: obj.directionId = reader.readVarint(); break;
+      default: reader.skip(wire);
     }
   }
   return obj;
 }
 
-// ─── VehicleDescriptor ──────────────────────────────────
-function readVehicle(pbf, end) {
+function readVehicle(reader, end) {
   const obj = { id: '', label: '', licensePlate: '' };
-  while (pbf.pos < end) {
-    const tag = pbf.readTag();
-    switch (tag >> 3) {
-      case 1: obj.id = pbf.readString(); break;
-      case 2: obj.label = pbf.readString(); break;
-      case 3: obj.licensePlate = pbf.readString(); break;
-      default: pbf.skip(tag & 7);
+  while (reader.pos < end) {
+    const tag = reader.readTag();
+    const field = tag >> 3;
+    const wire = tag & 7;
+    switch (field) {
+      case 1: obj.id = reader.readString(); break;
+      case 2: obj.label = reader.readString(); break;
+      case 3: obj.licensePlate = reader.readString(); break;
+      default: reader.skip(wire);
     }
   }
   return obj;
 }
 
-// ─── Position ───────────────────────────────────────────
-function readPosition(pbf, end) {
+function readPosition(reader, end) {
   const obj = { latitude: 0, longitude: 0, bearing: 0, speed: 0 };
-  while (pbf.pos < end) {
-    const tag = pbf.readTag();
-    switch (tag >> 3) {
-      case 1: obj.latitude = pbf.readFloat(); break;
-      case 2: obj.longitude = pbf.readFloat(); break;
-      case 3: obj.bearing = pbf.readFloat(); break;
-      case 4: obj.speed = pbf.readFloat(); break;
-      default: pbf.skip(tag & 7);
+  while (reader.pos < end) {
+    const tag = reader.readTag();
+    const field = tag >> 3;
+    const wire = tag & 7;
+    switch (field) {
+      case 1: obj.latitude = reader.readFloat(); break;
+      case 2: obj.longitude = reader.readFloat(); break;
+      case 3: obj.bearing = reader.readFloat(); break;
+      case 4: obj.speed = reader.readFloat(); break;
+      default: reader.skip(wire);
     }
   }
   return obj;
 }
 
-// ─── VehiclePosition ────────────────────────────────────
-function readVehiclePosition(pbf, end) {
+function readVehiclePosition(reader, end) {
   const obj = { trip: null, position: null, stopSequence: 0, stopId: '', timestamp: 0, vehicle: null };
-  while (pbf.pos < end) {
-    const tag = pbf.readTag();
-    switch (tag >> 3) {
-      case 1: { const e = pbf.readVarint() + pbf.pos; obj.trip = readTrip(pbf, e); break; }
-      case 2: { const e = pbf.readVarint() + pbf.pos; obj.position = readPosition(pbf, e); break; }
-      case 3: obj.stopSequence = pbf.readVarint(); break;
-      case 4: pbf.readVarint(); break; // current_status enum
-      case 5: obj.timestamp = pbf.readVarint(); break;
-      case 7: obj.stopId = pbf.readString(); break;
-      case 8: { const e = pbf.readVarint() + pbf.pos; obj.vehicle = readVehicle(pbf, e); break; }
-      default: pbf.skip(tag & 7);
+  while (reader.pos < end) {
+    const tag = reader.readTag();
+    const field = tag >> 3;
+    const wire = tag & 7;
+    switch (field) {
+      case 1: { const e = reader.readVarint() + reader.pos; obj.trip = readTrip(reader, e); break; }
+      case 2: { const e = reader.readVarint() + reader.pos; obj.position = readPosition(reader, e); break; }
+      case 3: obj.stopSequence = reader.readVarint(); break;
+      case 4: reader.readVarint(); break;
+      case 5: obj.timestamp = reader.readVarint(); break;
+      case 7: obj.stopId = reader.readString(); break;
+      case 8: { const e = reader.readVarint() + reader.pos; obj.vehicle = readVehicle(reader, e); break; }
+      default: reader.skip(wire);
     }
   }
   return obj;
 }
 
-// ─── TripUpdate ─────────────────────────────────────────
-function readTripUpdate(pbf, end) {
+function readTripUpdate(reader, end) {
   const obj = { trip: null, stopTimeUpdate: [], vehicle: null, timestamp: 0 };
-  while (pbf.pos < end) {
-    const tag = pbf.readTag();
-    switch (tag >> 3) {
-      case 1: { const e = pbf.readVarint() + pbf.pos; obj.trip = readTrip(pbf, e); break; }
-      case 2: { const e = pbf.readVarint() + pbf.pos; obj.stopTimeUpdate.push(readStopTimeUpdate(pbf, e)); break; }
-      case 3: { const e = pbf.readVarint() + pbf.pos; obj.vehicle = readVehicle(pbf, e); break; }
-      case 4: obj.timestamp = pbf.readVarint(); break;
-      default: pbf.skip(tag & 7);
+  while (reader.pos < end) {
+    const tag = reader.readTag();
+    const field = tag >> 3;
+    const wire = tag & 7;
+    switch (field) {
+      case 1: { const e = reader.readVarint() + reader.pos; obj.trip = readTrip(reader, e); break; }
+      case 2: { const e = reader.readVarint() + reader.pos; obj.stopTimeUpdate.push(readStopTimeUpdate(reader, e)); break; }
+      case 3: { const e = reader.readVarint() + reader.pos; obj.vehicle = readVehicle(reader, e); break; }
+      case 4: obj.timestamp = reader.readVarint(); break;
+      default: reader.skip(wire);
     }
   }
   return obj;
 }
 
-// ─── FeedEntity ─────────────────────────────────────────
-function readEntity(pbf, end) {
+function readEntity(reader, end) {
   const obj = { id: '', isDeleted: false, tripUpdate: null, vehiclePosition: null };
-  while (pbf.pos < end) {
-    const tag = pbf.readTag();
-    switch (tag >> 3) {
-      case 1: obj.id = pbf.readString(); break;
-      case 2: obj.isDeleted = pbf.readBoolean(); break;
-      case 3: { const e = pbf.readVarint() + pbf.pos; obj.tripUpdate = readTripUpdate(pbf, e); break; }
-      case 4: { const e = pbf.readVarint() + pbf.pos; obj.vehiclePosition = readVehiclePosition(pbf, e); break; }
-      case 5: pbf.skip(tag & 7); break; // alert - skip for now
-      default: pbf.skip(tag & 7);
+  while (reader.pos < end) {
+    const tag = reader.readTag();
+    const field = tag >> 3;
+    const wire = tag & 7;
+    switch (field) {
+      case 1: obj.id = reader.readString(); break;
+      case 2: obj.isDeleted = reader.readBoolean(); break;
+      case 3: { const e = reader.readVarint() + reader.pos; obj.tripUpdate = readTripUpdate(reader, e); break; }
+      case 4: { const e = reader.readVarint() + reader.pos; obj.vehiclePosition = readVehiclePosition(reader, e); break; }
+      default: reader.skip(wire);
     }
   }
   return obj;
 }
 
-// ─── FeedMessage (entry point) ──────────────────────────
 export function decodeFeedMessage(buffer) {
-  const pbf = new Pbf(new Uint8Array(buffer));
+  const reader = new PbfReader(buffer);
   const feed = { timestamp: 0, entities: [] };
 
-  while (pbf.pos < pbf.length) {
-    const tag = pbf.readTag();
-    switch (tag >> 3) {
+  while (reader.pos < reader.length) {
+    const tag = reader.readTag();
+    if (tag === 0) break;
+    const field = tag >> 3;
+    const wire = tag & 7;
+    switch (field) {
       case 1: {
-        // FeedHeader
-        const end = pbf.readVarint() + pbf.pos;
-        while (pbf.pos < end) {
-          const htag = pbf.readTag();
-          switch (htag >> 3) {
-            case 2: feed.timestamp = pbf.readVarint(); break;
-            default: pbf.skip(htag & 7);
+        const end = reader.readVarint() + reader.pos;
+        while (reader.pos < end) {
+          const htag = reader.readTag();
+          const hfield = htag >> 3;
+          const hwire = htag & 7;
+          switch (hfield) {
+            case 2: feed.timestamp = reader.readVarint(); break;
+            default: reader.skip(hwire);
           }
         }
         break;
       }
       case 2: {
-        const end = pbf.readVarint() + pbf.pos;
-        feed.entities.push(readEntity(pbf, end));
+        const end = reader.readVarint() + reader.pos;
+        feed.entities.push(readEntity(reader, end));
         break;
       }
-      default: pbf.skip(tag & 7);
+      default: reader.skip(wire);
     }
   }
   return feed;
