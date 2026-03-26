@@ -1,0 +1,37 @@
+{
+  "name": "vl-transit",
+  "version": "1.0.0",
+  "description": "Västmanland Länstrafik (VL) realtidsvisualisering med GTFS-data från Trafiklab",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "client": "vite",
+    "server": "node server/index.js",
+    "download-gtfs": "node scripts/download-gtfs.js",
+    "upload-kv": "node scripts/upload-kv.js",
+    "build": "vite build",
+    "build:pages": "GITHUB_PAGES=1 vite build",
+    "deploy:worker": "cd worker && npx wrangler deploy",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "gtfs-realtime-bindings": "^1.1.1",
+    "leaflet": "^1.9.4",
+    "node-fetch": "^3.3.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-leaflet": "^4.2.1",
+    "unzipper": "^0.12.3",
+    "csv-parse": "^5.6.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
+    "vite": "^6.0.7"
+  }
+}

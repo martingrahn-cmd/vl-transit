@@ -1,0 +1,6 @@
+node_modules/
+dist/
+.env
+server/gtfs-data/
+*.zip
+.DS_Store

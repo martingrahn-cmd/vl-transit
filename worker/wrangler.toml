@@ -1,0 +1,10 @@
+name = "vl-transit-api"
+main = "src/index.js"
+compatibility_date = "2024-12-01"
+
+[vars]
+GTFS_OPERATOR = "vastmanland"
+
+[[kv_namespaces]]
+binding = "GTFS_KV"
+id = "ec1c36eae7cb48eaa82032be7ad41ebb"
