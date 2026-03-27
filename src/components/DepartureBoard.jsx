@@ -125,7 +125,9 @@ export default function DepartureBoard({ gtfs, initialStopId }) {
 
   function formatTime(timeStr) {
     if (!timeStr) return '--:--';
-    return timeStr.slice(0, 5);
+    const [h, m] = timeStr.split(':');
+    const hour = parseInt(h) % 24; // GTFS: 24:05 → 00:05, 25:30 → 01:30
+    return `${String(hour).padStart(2, '0')}:${m}`;
   }
 
   // #8 — Highlight matchande text

@@ -174,15 +174,21 @@ function timeToSeconds(timeStr) {
   return h * 3600 + m * 60 + (s || 0);
 }
 
+function swedishNow() {
+  const str = new Date().toLocaleString('sv-SE', { timeZone: 'Europe/Stockholm' });
+  // "2026-03-27 22:52:10"
+  const [date, time] = str.split(' ');
+  return { date: date.replace(/-/g, ''), time };
+}
+
 function todayStr() {
-  // Swedish time (UTC+1/+2)
-  const d = new Date(Date.now() + 3600000 * 2); // CET+1 (sommartid)
-  return d.toISOString().slice(0, 10).replace(/-/g, '');
+  return swedishNow().date;
 }
 
 function nowSeconds() {
-  const d = new Date(Date.now() + 3600000 * 2);
-  return d.getUTCHours() * 3600 + d.getUTCMinutes() * 60 + d.getUTCSeconds();
+  const { time } = swedishNow();
+  const [h, m, s] = time.split(':').map(Number);
+  return h * 3600 + m * 60 + (s || 0);
 }
 
 async function handleDepartures(env, stopId, params) {
