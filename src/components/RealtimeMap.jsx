@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { MapContainer, TileLayer, CircleMarker, Popup, Marker, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, CircleMarker, Popup, Marker, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { apiUrl } from '../lib/api';
@@ -57,8 +57,18 @@ export default function RealtimeMap({ gtfs }) {
   const [vehicleCount, setVehicleCount] = useState(0);
   const [withRoute, setWithRoute] = useState(0);
   const [hideUnknown, setHideUnknown] = useState(true);
+  const [showRoutes, setShowRoutes] = useState(true);
+  const [shapes, setShapes] = useState(null);
   const [fullscreen, setFullscreen] = useState(false);
   const wrapperRef = useRef(null);
+
+  // Hämta shapes (en gång)
+  useEffect(() => {
+    fetch(apiUrl('/api/gtfs/shapes'))
+      .then(r => r.json())
+      .then(data => setShapes(data))
+      .catch(err => console.warn('Shapes:', err.message));
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -136,6 +146,19 @@ export default function RealtimeMap({ gtfs }) {
           Dölj okända fordon
         </label>
 
+        <label style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          fontSize: 13, color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none',
+        }}>
+          <input
+            type="checkbox"
+            checked={showRoutes}
+            onChange={e => setShowRoutes(e.target.checked)}
+            style={{ accentColor: 'var(--vl-blue)' }}
+          />
+          Visa ruttlinjer
+        </label>
+
         <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>
           Visar {displayVehicles.length} av {vehicleCount}
         </span>
@@ -164,6 +187,25 @@ export default function RealtimeMap({ gtfs }) {
           />
 
           <MapResizer fullscreen={fullscreen} />
+
+          {/* Ruttlinjer */}
+          {showRoutes && shapes && gtfs.routes && gtfs.routes.map(route => {
+            const routeShapes = shapes[route.id];
+            if (!routeShapes || routeShapes.length === 0) return null;
+            const color = route.color || routeColor(route.id);
+            return routeShapes.map((coords, i) => (
+              <Polyline
+                key={`${route.id}-${i}`}
+                positions={coords}
+                pathOptions={{ color, weight: 3, opacity: 0.5 }}
+              >
+                <Popup>
+                  <strong>Linje {route.short}</strong>
+                  {route.long && <><br />{route.long}</>}
+                </Popup>
+              </Polyline>
+            ));
+          })}
 
           {stopAreas.slice(0, 200).map(stop => (
             <CircleMarker

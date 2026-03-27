@@ -149,12 +149,15 @@ app.get('/api/gtfs/routes', (req, res) => {
   }
 });
 
-app.get('/api/gtfs/shapes', (req, res) => {
+app.get('/api/gtfs/shapes/:routeId?', (req, res) => {
   try {
-    const data = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'shapes.json'), 'utf-8'));
+    const data = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'shapes_by_route.json'), 'utf-8'));
+    if (req.params.routeId) {
+      return res.json({ [req.params.routeId]: data[req.params.routeId] || [] });
+    }
     res.json(data);
   } catch {
-    res.status(404).json({ error: 'shapes.json saknas' });
+    res.status(404).json({ error: 'shapes_by_route.json saknas — kör npm run download-gtfs' });
   }
 });
 

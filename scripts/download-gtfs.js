@@ -198,6 +198,44 @@ function buildSummary(jsonDir) {
   fs.writeFileSync(tripServicePath, JSON.stringify(tripService));
   console.log(`  ✅ Trip→service: ${Object.keys(tripService).length} turer`);
 
+  // Bygg shapes per route: routeId → [[[lat,lon], ...], ...]
+  console.log('  Bygger shapes per route...');
+  const shapes = JSON.parse(fs.readFileSync(path.join(jsonDir, 'shapes.json'), 'utf-8'));
+
+  // shape_id → [[lat,lon], ...] sorterat på sequence
+  const shapePoints = {};
+  for (const pt of shapes) {
+    if (!shapePoints[pt.shape_id]) shapePoints[pt.shape_id] = [];
+    shapePoints[pt.shape_id].push({
+      seq: parseInt(pt.shape_pt_sequence),
+      lat: Math.round(parseFloat(pt.shape_pt_lat) * 1e5) / 1e5,
+      lon: Math.round(parseFloat(pt.shape_pt_lon) * 1e5) / 1e5,
+    });
+  }
+  for (const pts of Object.values(shapePoints)) {
+    pts.sort((a, b) => a.seq - b.seq);
+  }
+
+  // trip → shape_id, gruppera unika shapes per route
+  const routeShapeIds = {};  // routeId → Set of shape_ids
+  for (const trip of trips) {
+    if (!trip.shape_id) continue;
+    if (!routeShapeIds[trip.route_id]) routeShapeIds[trip.route_id] = new Set();
+    routeShapeIds[trip.route_id].add(trip.shape_id);
+  }
+
+  const shapesByRoute = {};
+  for (const [routeId, shapeIds] of Object.entries(routeShapeIds)) {
+    shapesByRoute[routeId] = [...shapeIds].map(sid =>
+      (shapePoints[sid] || []).map(p => [p.lat, p.lon])
+    ).filter(s => s.length > 0);
+  }
+
+  const shapesPath = path.join(jsonDir, 'shapes_by_route.json');
+  fs.writeFileSync(shapesPath, JSON.stringify(shapesByRoute));
+  const totalShapes = Object.values(shapesByRoute).reduce((s, arr) => s + arr.length, 0);
+  console.log(`  ✅ Shapes: ${totalShapes} unika shapes för ${Object.keys(shapesByRoute).length} linjer`);
+
   const summary = {
     operator: process.env.GTFS_OPERATOR,
     generated: new Date().toISOString(),

@@ -118,6 +118,15 @@ async function main() {
     }));
   pairs.push({ key: 'meta:stopsearch', value: JSON.stringify(searchStops) });
 
+  // 10. Shapes by route
+  console.log('  meta:shapes');
+  try {
+    const shapesData = fs.readFileSync(path.join(DATA_DIR, 'shapes_by_route.json'), 'utf-8');
+    pairs.push({ key: 'meta:shapes', value: shapesData });
+  } catch {
+    console.log('  ⚠ shapes_by_route.json saknas — kör npm run download-gtfs');
+  }
+
   // Upload bulk (lookups)
   console.log(`\n  Laddar upp ${pairs.length} lookup-nycklar...`);
   kvPutBulk(pairs);

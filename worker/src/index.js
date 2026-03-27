@@ -75,6 +75,18 @@ async function handleSummary(env) {
   return json(data);
 }
 
+// ─── Route: /api/gtfs/shapes ────────────────────────────
+
+async function handleShapes(env, routeId) {
+  const shapes = await kvGet(env.GTFS_KV, 'meta:shapes');
+  if (!shapes) return json({ error: 'Shapes ej uppladdade till KV' }, 404);
+
+  if (routeId) {
+    return json({ [routeId]: shapes[routeId] || [] });
+  }
+  return json(shapes);
+}
+
 // ─── Route: /api/gtfs/stops/search ──────────────────────
 
 async function handleStopSearch(env, query) {
@@ -303,7 +315,11 @@ export default {
     try {
       if (path === '/api/health') return await handleHealth(env);
       if (path === '/api/gtfs/summary') return await handleSummary(env);
+      if (path === '/api/gtfs/shapes') return await handleShapes(env);
       if (path === '/api/gtfs/stops/search') return await handleStopSearch(env, url.searchParams.get('q'));
+
+      const shapeMatch = path.match(/^\/api\/gtfs\/shapes\/(.+)$/);
+      if (shapeMatch) return await handleShapes(env, shapeMatch[1]);
       if (path === '/api/realtime/vehicles') return await handleVehicles(env);
       if (path === '/api/realtime/alerts') return await handleAlerts(env);
 
@@ -313,6 +329,8 @@ export default {
       return json({ error: 'Okänd endpoint', endpoints: [
         '/api/health',
         '/api/gtfs/summary',
+        '/api/gtfs/shapes',
+        '/api/gtfs/shapes/:routeId',
         '/api/gtfs/stops/search?q=...',
         '/api/realtime/vehicles',
         '/api/realtime/departures/:stopId',
