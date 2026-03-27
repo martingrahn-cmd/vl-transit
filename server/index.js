@@ -402,7 +402,7 @@ app.get('/api/realtime/departures/:stopId', async (req, res) => {
 
     // Filtrera och bygg avgångslista
     const deps = [];
-    const windowStart = nowSec - 120;  // 2 min sedan
+    const windowStart = nowSec - 900;  // 15 min sedan (täcker försenade bussar)
     const windowEnd = nowSec + 5400;   // 90 min framåt
 
     for (const entry of staticDeps) {

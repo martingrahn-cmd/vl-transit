@@ -255,7 +255,7 @@ async function handleDepartures(env, stopId) {
     }
 
     const depSec = timeToSeconds(entry.d);
-    if (depSec < nowSec - 120 || depSec > nowSec + 5400) continue;
+    if (depSec < nowSec - 900 || depSec > nowSec + 5400) continue;
 
     const routeId = trip2route?.[entry.t];
     const route = routeId ? routes?.[routeId] : null;
