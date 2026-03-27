@@ -185,7 +185,7 @@ function nowSeconds() {
   return d.getUTCHours() * 3600 + d.getUTCMinutes() * 60 + d.getUTCSeconds();
 }
 
-async function handleDepartures(env, stopId) {
+async function handleDepartures(env, stopId, params) {
   // Hämta alla lookups parallellt
   const [stops, stopChildren, depEntries, routes, trip2route, headsigns, lastStops, tripServices, calendar] =
     await Promise.all([
@@ -234,6 +234,9 @@ async function handleDepartures(env, stopId) {
 
   // Bygg avgångslista
   const nowSec = nowSeconds();
+  const hours = Math.min(parseInt(params?.get('hours')) || 1.5, 18);
+  const windowEnd = nowSec + hours * 3600;
+  const maxResults = hours > 2 ? 200 : 50;
   const deps = [];
 
   for (const entry of entries) {
@@ -255,7 +258,7 @@ async function handleDepartures(env, stopId) {
     }
 
     const depSec = timeToSeconds(entry.d);
-    if (depSec < nowSec - 900 || depSec > nowSec + 5400) continue;
+    if (depSec < nowSec - 900 || depSec > windowEnd) continue;
 
     const routeId = trip2route?.[entry.t];
     const route = routeId ? routes?.[routeId] : null;
@@ -285,7 +288,7 @@ async function handleDepartures(env, stopId) {
     today: todayStr(),
     activeServices: activeServices.size,
     realtimeTrips: Object.keys(rtDelays).length,
-    departures: deps.slice(0, 50),
+    departures: deps.slice(0, maxResults),
   });
 }
 
@@ -324,7 +327,7 @@ export default {
       if (path === '/api/realtime/alerts') return await handleAlerts(env);
 
       const depMatch = path.match(/^\/api\/realtime\/departures\/(.+)$/);
-      if (depMatch) return await handleDepartures(env, depMatch[1]);
+      if (depMatch) return await handleDepartures(env, depMatch[1], url.searchParams);
 
       return json({ error: 'Okänd endpoint', endpoints: [
         '/api/health',

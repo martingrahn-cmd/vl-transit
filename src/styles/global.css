@@ -393,6 +393,14 @@ body {
   animation: pulse 1s infinite;
 }
 
+.dep-chip-scheduled {
+  font-size: 10px;
+  font-weight: 400;
+  color: #666;
+  padding-left: 4px;
+  border-left: 1px solid #333;
+}
+
 .dep-chip-platform {
   font-family: var(--font);
   font-size: 10px;

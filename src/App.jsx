@@ -11,7 +11,9 @@ const TABS = [
 ];
 
 export default function App() {
-  const [tab, setTab] = useState('map');
+  // #10 — Om URL-hash pekar på en hållplats, öppna avgångstavlan direkt
+  const hashMatch = window.location.hash.match(/^#\/departures\/(.+)$/);
+  const [tab, setTab] = useState(hashMatch ? 'departures' : 'map');
   const [gtfs, setGtfs] = useState(null);
   const [health, setHealth] = useState(null);
   const [error, setError] = useState(null);
